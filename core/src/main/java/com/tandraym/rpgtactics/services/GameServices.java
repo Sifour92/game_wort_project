@@ -14,6 +14,8 @@ public interface GameServices {
     /** Менеджер ассетов (текстуры, звуки, шрифты). */
     AssetManager assets();
 
+    void loadBootAssets();
+
     /** Абстракция ввода (клавиатура, мышь, тач). */
     Input input();
 
