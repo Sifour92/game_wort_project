@@ -15,13 +15,25 @@ public class MainGame extends Game {
     @Override
     public void create() {
         Gdx.app.setLogLevel(Application.LOG_DEBUG);
-        setScreen(new RootStateScreen(this, GameState.BOOT));
+        services.loadBootAssets();
+        setScreen(new RootStateScreen(this));
     }
 
     public Engine getEngine()   {
         return engine;
     }
     public GameServices sv()    {
+        return services;
+    }
+
+    @Override
+    public void dispose() {
+        // освобождаем ассеты, чтобы не текла память при перезапуске SuperDev
+        services.assets().dispose();
+        super.dispose();// диспоуз текущего экрана
+    }
+
+    GameServices getGameServices() {
         return services;
     }
 }

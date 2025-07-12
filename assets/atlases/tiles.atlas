@@ -1,0 +1,13 @@
+
+tiles.png
+size: 256, 256
+format: RGBA8888
+filter: Nearest, Nearest
+repeat: none
+tilemap
+  rotate: false
+  xy: 2, 2
+  size: 203, 186
+  orig: 203, 186
+  offset: 0, 0
+index: -1

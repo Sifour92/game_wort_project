@@ -1,13 +1,49 @@
+// ---------------------------------------------------------------------------
+// настройки вывода, имя проекта в Eclipse
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 eclipse.project.name = appName + '-core'
 
+// ---------------------------------------------------------------------------
+// зависимости основной логики
 dependencies {
   api "com.badlogicgames.ashley:ashley:$ashleyVersion"
   api "com.badlogicgames.gdx:gdx-ai:$aiVersion"
   api "com.badlogicgames.gdx:gdx-box2d:$gdxVersion"
   api "com.badlogicgames.gdx:gdx:$gdxVersion"
 
-  if(enableGraalNative == 'true') {
+  if (enableGraalNative == 'true') {
     implementation "io.github.berstanio:gdx-svmhelper-annotations:$graalHelperVersion"
   }
+
+  // конфигурация для gdx‑tools
+  configurations {
+    desktopTools
+  }
+
+  // --- TexturePacker: десктоп‑утилиты ------------------------------------
+  desktopTools "com.badlogicgames.gdx:gdx-tools:$gdxVersion"
+}
+
+// ---------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------
+// таск: собирает все PNG в assets/raw → atlas в assets/atlases
+task packTiles(type: JavaExec) {
+  group = "assets"
+  description = "Packs sprites from assets/raw into a texture atlas"
+
+  classpath configurations.desktopTools
+  mainClass = "com.badlogic.gdx.tools.texturepacker.TexturePacker"
+
+  // <inputDir> <outputDir> <atlasName (без .atlas)>
+  args "../assets/raw", "../assets/atlases", "tiles"
+
+  // базовые настройки страницы и паддингов (можно менять)
+  systemProperties = [
+    "texturepacker.maxWidth" : "2048",
+    "texturepacker.maxHeight": "2048",
+    "texturepacker.paddingX" : "2",
+    "texturepacker.paddingY" : "2"
+  ]
 }
