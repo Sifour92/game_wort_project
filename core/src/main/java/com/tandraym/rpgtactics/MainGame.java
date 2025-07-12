@@ -9,20 +9,23 @@ import com.tandraym.rpgtactics.services.GameServices;
 
 public class MainGame extends Game {
 
-    private final Engine engine = new Engine();
-    private final GameServices services = new DefaultGameServices();
+    private Engine engine;
+    private GameServices services;
 
     @Override
     public void create() {
         Gdx.app.setLogLevel(Application.LOG_DEBUG);
+        engine = new Engine();
+        services = new DefaultGameServices(); // инициализируем
         services.loadBootAssets();
         setScreen(new RootStateScreen(this));
     }
 
-    public Engine getEngine()   {
+    public Engine getEngine() {
         return engine;
     }
-    public GameServices sv()    {
+
+    public GameServices sv() {
         return services;
     }
 
