@@ -8,8 +8,10 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.maps.MapProperties;
 import com.badlogic.gdx.maps.tiled.TiledMap;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 
@@ -26,6 +28,12 @@ public class RootStateScreen implements Screen {
 
     private static final float VIEW_W = 20f;   // ширина в тайлах
     private static final float VIEW_H = 12f;   // высота
+    private static final float TILE_SIZE = 1f;
+
+
+    private float worldW, worldH;   // реальный размер мира
+    private float targetX, targetY;
+
 
     //float aspect = (float)Gdx.graphics.getWidth() / Gdx.graphics.getHeight();
     //float VIEW_W = 20f;
@@ -120,18 +128,62 @@ public class RootStateScreen implements Screen {
         camera.position.set(10, 6, 0); // центр камеры (половина от 20x12)
         camera.update();
 
+        // Размеры карты в тайлах
+        MapProperties prop = map.getProperties();
+        int tilesX = prop.get("width", Integer.class);   // из .tmx <map width="…">
+        int tilesY = prop.get("height", Integer.class);
+
+// Ширина/высота мира в «юнитах» (у нас 1 юнит = 1 тайл, потому что unitScale = 1/16f)
+        worldW = tilesX * TILE_SIZE;    // TILE_SIZE = 1f
+        worldH = tilesY * TILE_SIZE;
+
+        targetX = camera.position.x = worldW / 2f;
+        targetY = camera.position.y = worldH / 2f;
+
     }
 
     private void updateExplore(float delta) {
-        float speed = 5f * delta;
-        Input in = game.getGameServices().input();
-        if (in.isKeyPressed(Input.Keys.A)) camera.position.x -= speed;
-        if (in.isKeyPressed(Input.Keys.D)) camera.position.x += speed;
-        if (in.isKeyPressed(Input.Keys.W)) camera.position.y += speed;
-        if (in.isKeyPressed(Input.Keys.S)) camera.position.y -= speed;
 
-        camera.update();                 // ← сохраняем
+        handleInput(delta);
+        lerpCamera();
+
         mapRenderer.setView(camera);     // ← используем новую матрицу
         mapRenderer.render();
     }
+
+    private void handleInput(float delta) {
+        // Шаг перемещения (скорость) зависит от времени кадра — это обеспечивает одинаковую скорость на любом FPS
+        //💡 Смысл:
+        //Ты хочешь, чтобы объект (в данном случае — камера или цель камеры) двигался со скоростью 10 тайлов в секунду,
+        // НЕ зависимо от FPS. Именно это и делает умножение на delta.
+
+        //⏱ Что такое delta?
+        //delta — это значение, которое возвращает метод:
+//        float delta = Gdx.graphics.getDeltaTime();
+        float speed = 10f * delta;
+
+        //🧠 ЧТО ТАКОЕ Gdx?
+        //Gdx — это главный статический "мост" (Facade) ко всем основным подсистемам LibGDX.
+        Input in = game.getGameServices().input();
+
+        if (in.isKeyPressed(Input.Keys.A) || in.isKeyPressed(Input.Keys.LEFT)) targetX -= speed;
+        if (in.isKeyPressed(Input.Keys.D) || in.isKeyPressed(Input.Keys.RIGHT)) targetX += speed;
+        if (in.isKeyPressed(Input.Keys.W) || in.isKeyPressed(Input.Keys.UP)) targetY += speed;
+        if (in.isKeyPressed(Input.Keys.S) || in.isKeyPressed(Input.Keys.DOWN)) targetY -= speed;
+
+        float halfW = viewport.getWorldWidth() / 2f;
+        float halfH = viewport.getWorldHeight() / 2f;
+
+        targetX = MathUtils.clamp(targetX, halfW, worldW - halfW);
+        targetY = MathUtils.clamp(targetY, halfH, worldH - halfH);
+
+    }
+
+    private void lerpCamera() {
+        camera.position.x += (targetX - camera.position.x) * 0.12f; //0.12f — коэффициент сглаживания (12 % расстояния за кадр). Измените на вкус.
+        camera.position.y += (targetY - camera.position.y) * 0.12f;
+        camera.update();                 // ← сохраняем
+    }
+
+
 }
