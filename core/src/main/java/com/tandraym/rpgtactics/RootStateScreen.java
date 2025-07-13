@@ -175,7 +175,6 @@ public class RootStateScreen implements Screen {
     private void updateCameraTarget(float delta) {
         handleMovementInput(delta);
         clampCameraTarget();
-        blockTargetIfCollision();
     }
 
     private void handleMovementInput(float delta) {
@@ -187,15 +186,25 @@ public class RootStateScreen implements Screen {
         //delta — это значение, которое возвращает метод:
         //float delta = Gdx.graphics.getDeltaTime();
         float speed = 10f * delta;
-
         //🧠 ЧТО ТАКОЕ Gdx?
         //Gdx — это главный статический "мост" (Facade) ко всем основным подсистемам LibGDX.
         Input in = game.getGameServices().input();
 
-        if (in.isKeyPressed(Input.Keys.A) || in.isKeyPressed(Input.Keys.LEFT)) targetX -= speed;
-        if (in.isKeyPressed(Input.Keys.D) || in.isKeyPressed(Input.Keys.RIGHT)) targetX += speed;
-        if (in.isKeyPressed(Input.Keys.W) || in.isKeyPressed(Input.Keys.UP)) targetY += speed;
-        if (in.isKeyPressed(Input.Keys.S) || in.isKeyPressed(Input.Keys.DOWN)) targetY -= speed;
+        float nextX = targetX;
+        float nextY = targetY;
+
+        if (in.isKeyPressed(Input.Keys.A) || in.isKeyPressed(Input.Keys.LEFT)) nextX -= speed;
+        if (in.isKeyPressed(Input.Keys.D) || in.isKeyPressed(Input.Keys.RIGHT)) nextX += speed;
+        if (in.isKeyPressed(Input.Keys.W) || in.isKeyPressed(Input.Keys.UP)) nextY += speed;
+        if (in.isKeyPressed(Input.Keys.S) || in.isKeyPressed(Input.Keys.DOWN)) nextY -= speed;
+
+        int cellX = MathUtils.floor(nextX);
+        int cellY = MathUtils.floor(nextY);
+
+        if (isWalkable(cellX, cellY)) {
+            targetX = nextX;
+            targetY = nextY;
+        }
     }
 
     private void clampCameraTarget() {
@@ -240,18 +249,6 @@ public class RootStateScreen implements Screen {
 
     }
 
-    private void blockTargetIfCollision() {
-        // clamp target после вычисления targetX/targetY
-        //Пока это грубый пример. Для персонажей будет отдельная система.
-        int cellX = MathUtils.floor(targetX);
-        int cellY = MathUtils.floor(targetY);
-        if (isWalkable(cellX, cellY)) {
-            // отменяем движение в эту клетку
-            targetX = camera.position.x;
-            targetY = camera.position.y;
-        }
-    }
-
 
     //Плавно двигает камеру к целевой точке (targetX/Y), обновляет положение камеры.
     private void lerpCamera() {
@@ -264,11 +261,15 @@ public class RootStateScreen implements Screen {
     //Проверяет, пуста ли ячейка на collision-слое → значит проходима.
     private boolean isWalkable(int x, int y) {
         // границы карты
-        if (x < 0 || y < 0 || x >= collLayer.getWidth() || y >= collLayer.getHeight())
-            return true;
-
+        if (!isInsideMap(x, y)) return false;
         // в collision‑слое непустая ячейка = стена
-        return collLayer.getCell(x, y) != null;
+
+        boolean hasObstacle = collLayer.getCell(x, y) != null;
+        return !hasObstacle;
+    }
+
+    private boolean isInsideMap(int x, int y) {
+        return x >= 0 && y >= 0 && x < collLayer.getWidth() && y < collLayer.getHeight();
     }
 
     //Шаг v2.5‑ 4 Вывод дебаг‑маски (по желанию)
