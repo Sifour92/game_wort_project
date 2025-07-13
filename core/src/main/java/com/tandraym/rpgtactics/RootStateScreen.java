@@ -8,8 +8,10 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.maps.MapProperties;
 import com.badlogic.gdx.maps.tiled.TiledMap;
+import com.badlogic.gdx.maps.tiled.TiledMapTileLayer;
 import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.ScreenUtils;
@@ -25,6 +27,10 @@ public class RootStateScreen implements Screen {
     private boolean mapInit = false;                      // чтобы один раз инициализировать карту
     private GameState state;
     private final MainGame game;
+    TiledMapTileLayer collLayer;
+    ShapeRenderer debugRenderer;
+// поле класса
+
 
     private static final float VIEW_W = 20f;   // ширина в тайлах
     private static final float VIEW_H = 12f;   // высота
@@ -110,6 +116,7 @@ public class RootStateScreen implements Screen {
     public void dispose() {
         batch.dispose();
         font.dispose();
+        debugRenderer.dispose();
         if (mapRenderer != null) mapRenderer.dispose();
     }
 
@@ -119,6 +126,7 @@ public class RootStateScreen implements Screen {
     }
 
     private void initExplore() {
+        debugRenderer = new ShapeRenderer();
         TiledMap map = game.getGameServices().assets().get("maps/home_map.tmx", TiledMap.class);
         mapRenderer = new OrthogonalTiledMapRenderer(map, 1f / 16f);
         camera = new OrthographicCamera();
@@ -140,26 +148,44 @@ public class RootStateScreen implements Screen {
         targetX = camera.position.x = worldW / 2f;
         targetY = camera.position.y = worldH / 2f;
 
+        collLayer = (TiledMapTileLayer) map.getLayers().get("collision");
+
+
     }
 
     private void updateExplore(float delta) {
 
-        handleInput(delta);
+        //обрабатывает движение по WASD, проверяет коллизию.
+        updateCameraTarget(delta);
+        //плавно перемещает камеру к цели (targetX/Y).
         lerpCamera();
+        renderCollisionDebug();
 
         mapRenderer.setView(camera);     // ← используем новую матрицу
+        // — рисует карту.
         mapRenderer.render();
     }
 
-    private void handleInput(float delta) {
+    //Обрабатывает:
+    //нажатие клавиш
+    //расчёт перемещения
+    //ограничение по границам карты
+    //проверку коллизии через isWalkable
+    //💡 Тут же происходит отказ от движения, если следующая клетка непроходима.
+    private void updateCameraTarget(float delta) {
+        handleMovementInput(delta);
+        clampCameraTarget();
+        blockTargetIfCollision();
+    }
+
+    private void handleMovementInput(float delta) {
         // Шаг перемещения (скорость) зависит от времени кадра — это обеспечивает одинаковую скорость на любом FPS
         //💡 Смысл:
         //Ты хочешь, чтобы объект (в данном случае — камера или цель камеры) двигался со скоростью 10 тайлов в секунду,
         // НЕ зависимо от FPS. Именно это и делает умножение на delta.
-
         //⏱ Что такое delta?
         //delta — это значение, которое возвращает метод:
-//        float delta = Gdx.graphics.getDeltaTime();
+        //float delta = Gdx.graphics.getDeltaTime();
         float speed = 10f * delta;
 
         //🧠 ЧТО ТАКОЕ Gdx?
@@ -170,7 +196,9 @@ public class RootStateScreen implements Screen {
         if (in.isKeyPressed(Input.Keys.D) || in.isKeyPressed(Input.Keys.RIGHT)) targetX += speed;
         if (in.isKeyPressed(Input.Keys.W) || in.isKeyPressed(Input.Keys.UP)) targetY += speed;
         if (in.isKeyPressed(Input.Keys.S) || in.isKeyPressed(Input.Keys.DOWN)) targetY -= speed;
+    }
 
+    private void clampCameraTarget() {
 // Ширина* и высота* «видимой области» (в мировых единицах) ——
 // это те самые значения, которые мы передавали при создании FitViewport,
 // например 20 × 12 тайлов.
@@ -212,10 +240,48 @@ public class RootStateScreen implements Screen {
 
     }
 
+    private void blockTargetIfCollision() {
+        // clamp target после вычисления targetX/targetY
+        //Пока это грубый пример. Для персонажей будет отдельная система.
+        int cellX = MathUtils.floor(targetX);
+        int cellY = MathUtils.floor(targetY);
+        if (isWalkable(cellX, cellY)) {
+            // отменяем движение в эту клетку
+            targetX = camera.position.x;
+            targetY = camera.position.y;
+        }
+    }
+
+
+    //Плавно двигает камеру к целевой точке (targetX/Y), обновляет положение камеры.
     private void lerpCamera() {
         camera.position.x += (targetX - camera.position.x) * 0.12f; //0.12f — коэффициент сглаживания (12 % расстояния за кадр). Измените на вкус.
         camera.position.y += (targetY - camera.position.y) * 0.12f;
         camera.update();                 // ← сохраняем
     }
 
+    //2.5‑2 Функция «проходима ли клетка»
+    //Проверяет, пуста ли ячейка на collision-слое → значит проходима.
+    private boolean isWalkable(int x, int y) {
+        // границы карты
+        if (x < 0 || y < 0 || x >= collLayer.getWidth() || y >= collLayer.getHeight())
+            return true;
+
+        // в collision‑слое непустая ячейка = стена
+        return collLayer.getCell(x, y) != null;
+    }
+
+    //Шаг v2.5‑ 4 Вывод дебаг‑маски (по желанию)
+    // debug-маска, рисующая непроходимые клетки (ShapeRenderer).
+    private void renderCollisionDebug() {
+        debugRenderer.setProjectionMatrix(camera.combined);
+        debugRenderer.begin(ShapeRenderer.ShapeType.Line);
+        for (int x = 0; x < collLayer.getWidth(); x++) {
+            for (int y = 0; y < collLayer.getHeight(); y++) {
+                if (isWalkable(x, y))
+                    debugRenderer.rect(x, y, 1, 1);
+            }
+        }
+        debugRenderer.end();
+    }
 }
