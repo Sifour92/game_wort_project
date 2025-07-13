@@ -8,6 +8,7 @@ import com.badlogic.gdx.graphics.GL20;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureAtlas;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.maps.MapProperties;
 import com.badlogic.gdx.maps.tiled.TiledMap;
@@ -29,7 +30,8 @@ public class RootStateScreen implements Screen {
     private final MainGame game;
     TiledMapTileLayer collLayer;
     ShapeRenderer debugRenderer;
-// поле класса
+    private TextureAtlas atlas;
+    private Player player;
 
 
     private static final float VIEW_W = 20f;   // ширина в тайлах
@@ -39,6 +41,8 @@ public class RootStateScreen implements Screen {
 
     private float worldW, worldH;   // реальный размер мира
     private float targetX, targetY;
+
+    private static final float CAM_LERP = 6f;   // скорость подъезда камеры
 
 
     //float aspect = (float)Gdx.graphics.getWidth() / Gdx.graphics.getHeight();
@@ -116,7 +120,7 @@ public class RootStateScreen implements Screen {
     public void dispose() {
         batch.dispose();
         font.dispose();
-        debugRenderer.dispose();
+//        debugRenderer.dispose();
         if (mapRenderer != null) mapRenderer.dispose();
     }
 
@@ -150,21 +154,67 @@ public class RootStateScreen implements Screen {
 
         collLayer = (TiledMapTileLayer) map.getLayers().get("collision");
 
+        atlas  = game.getGameServices().assets().get("atlases/tiles.atlas", TextureAtlas.class);
+        player = new Player(atlas, 5, 5);
 
     }
 
-    private void updateExplore(float delta) {
+    private void updateExplore(float dt) {
 
-        //обрабатывает движение по WASD, проверяет коллизию.
-        updateCameraTarget(delta);
-        //плавно перемещает камеру к цели (targetX/Y).
-        lerpCamera();
-        renderCollisionDebug();
+        /* --- 1. логика ввода и игрока ------------------------------------ */
+        handlePlayerInput(dt);   // WASD → player.x / player.y, dir
+        player.update(dt);       // lerp visX/visY, stateTime++
 
-        mapRenderer.setView(camera);     // ← используем новую матрицу
-        // — рисует карту.
+        /* --- 2. целевая точка камеры = центр игрока ---------------------- */
+        targetX = player.visX + 0.5f;
+        targetY = player.visY + 0.5f;
+        clampTarget();           // зажать внутри границ карты
+        lerpCamera();            // плавно подъехать к targetX/targetY
+
+        /* --- 3. рендер карты --------------------------------------------- */
+        mapRenderer.setView(camera);
         mapRenderer.render();
+
+        /* --- 4. (опция) дебаг-коллизия ----------------------------------- */
+        renderCollisionDebug();  // если нужен контур стен
+
+        /* --- 5. рендер игрока -------------------------------------------- */
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+        player.render(batch);    // draw(frame, visX, visY, 1, 1)
+        batch.end();
     }
+
+
+    /* ---------- ОБРАБОТКА ВВОДА ------------------------------------------ */
+    private void handlePlayerInput(float dt) {
+        int dx = 0, dy = 0;
+        Input in = game.getGameServices().input();
+
+        if (in.isKeyPressed(Input.Keys.A) || in.isKeyPressed(Input.Keys.LEFT))  { dx = -1; player.dir = 1; }
+        if (in.isKeyPressed(Input.Keys.D) || in.isKeyPressed(Input.Keys.RIGHT)) { dx =  1; player.dir = 2; }
+        if (in.isKeyPressed(Input.Keys.W) || in.isKeyPressed(Input.Keys.UP))    { dy =  1; player.dir = 3; }
+        if (in.isKeyPressed(Input.Keys.S) || in.isKeyPressed(Input.Keys.DOWN))  { dy = -1; player.dir = 0; }
+
+        if (dx != 0 || dy != 0) {
+            int nx = player.x + dx;
+            int ny = player.y + dy;
+            if (isWalkable(nx, ny)) {          // ← функция из шага 2.5
+                player.x = nx;
+                player.y = ny;
+            }
+        }
+    }
+
+    /* ---------- ЗАЖИМАЕМ ЦЕЛЬ В ПРЕДЕЛАХ КАРТЫ -------------------------- */
+    private void clampTarget() {
+        float halfW = viewport.getWorldWidth()  / 2f;
+        float halfH = viewport.getWorldHeight() / 2f;
+
+        targetX = MathUtils.clamp(targetX, halfW, worldW - halfW);
+        targetY = MathUtils.clamp(targetY, halfH, worldH - halfH);
+    }
+
 
     //Обрабатывает:
     //нажатие клавиш
@@ -250,13 +300,20 @@ public class RootStateScreen implements Screen {
     }
 
 
-    //Плавно двигает камеру к целевой точке (targetX/Y), обновляет положение камеры.
-    private void lerpCamera() {
-        camera.position.x += (targetX - camera.position.x) * 0.12f; //0.12f — коэффициент сглаживания (12 % расстояния за кадр). Измените на вкус.
-        camera.position.y += (targetY - camera.position.y) * 0.12f;
-        camera.update();                 // ← сохраняем
-    }
+//    //Плавно двигает камеру к целевой точке (targetX/Y), обновляет положение камеры.
+//    private void lerpCamera() {
+//        camera.position.x += (targetX - camera.position.x) * 0.12f; //0.12f — коэффициент сглаживания (12 % расстояния за кадр). Измените на вкус.
+//        camera.position.y += (targetY - camera.position.y) * 0.12f;
+//        camera.update();                 // ← сохраняем
+//    }
 
+
+    /* ---------- LERP‑КАМЕРА --------------------------------------------- */
+    private void lerpCamera() {
+        camera.position.x += (targetX - camera.position.x) * CAM_LERP * Gdx.graphics.getDeltaTime();
+        camera.position.y += (targetY - camera.position.y) * CAM_LERP * Gdx.graphics.getDeltaTime();
+        camera.update();
+    }
     //2.5‑2 Функция «проходима ли клетка»
     //Проверяет, пуста ли ячейка на collision-слое → значит проходима.
     private boolean isWalkable(int x, int y) {
@@ -284,5 +341,6 @@ public class RootStateScreen implements Screen {
             }
         }
         debugRenderer.end();
+        debugRenderer.dispose();
     }
 }
