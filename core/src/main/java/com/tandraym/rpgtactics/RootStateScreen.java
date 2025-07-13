@@ -120,7 +120,7 @@ public class RootStateScreen implements Screen {
     public void dispose() {
         batch.dispose();
         font.dispose();
-//        debugRenderer.dispose();
+        debugRenderer.dispose();
         if (mapRenderer != null) mapRenderer.dispose();
     }
 
@@ -341,6 +341,5 @@ public class RootStateScreen implements Screen {
             }
         }
         debugRenderer.end();
-        debugRenderer.dispose();
     }
 }
