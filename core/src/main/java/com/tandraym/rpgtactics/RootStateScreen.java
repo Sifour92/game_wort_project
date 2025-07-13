@@ -171,9 +171,42 @@ public class RootStateScreen implements Screen {
         if (in.isKeyPressed(Input.Keys.W) || in.isKeyPressed(Input.Keys.UP)) targetY += speed;
         if (in.isKeyPressed(Input.Keys.S) || in.isKeyPressed(Input.Keys.DOWN)) targetY -= speed;
 
-        float halfW = viewport.getWorldWidth() / 2f;
-        float halfH = viewport.getWorldHeight() / 2f;
+// Ширина* и высота* «видимой области» (в мировых единицах) ——
+// это те самые значения, которые мы передавали при создании FitViewport,
+// например 20 × 12 тайлов.
+//
+// getWorldWidth()/getWorldHeight() возвращают их текущие значения.
+// Делим на 2, чтобы получить **«полу‑размеры»** камеры.
+//
+// *Почему «в мировых единицах», а не в пикселях?
+//   Мы заранее решили, что 1 единица мира = 1 тайл (16 × 16 px),
+//   поэтому камера размером 20 × 12 показывает ровно 20 × 12 тайлов.
+//   Пиксели нас тут не интересуют.
+        float halfW = viewport.getWorldWidth() / 2f;   // половина ширины камеры
+        float halfH = viewport.getWorldHeight() / 2f;   // половина высоты камеры
 
+
+        // Ограничиваем (clamp) координаты «центра камеры» так, чтобы
+// она ни при каких обстоятельствах не вышла за пределы карты.
+
+// 1)  targetX = MathUtils.clamp(
+//         targetX,                // текущее желаемое X‑положение центра
+//         halfW,                  // минимально допустимое: левый край = 0
+//         worldW - halfW);        // максимально допустимое: правый край = worldW
+//
+// 2)  targetY = MathUtils.clamp(
+//         targetY,                // текущее желаемое Y‑положение центра
+//         halfH,                  // нижний край карты
+//         worldH - halfH);        // верхний край карты
+
+        //Что делает MathUtils.clamp(value, min, max)?
+        //Возвращает value, ограничив его диапазоном [min, max]:
+        //
+        //Если value < min → вернёт min.
+        //
+        //Если value > max → вернёт max.
+        //
+        //Иначе вернёт сам value.
         targetX = MathUtils.clamp(targetX, halfW, worldW - halfW);
         targetY = MathUtils.clamp(targetY, halfH, worldH - halfH);
 
@@ -184,6 +217,5 @@ public class RootStateScreen implements Screen {
         camera.position.y += (targetY - camera.position.y) * 0.12f;
         camera.update();                 // ← сохраняем
     }
-
 
 }
